@@ -1,0 +1,38 @@
+name: Trend Vision One – destroy EKS environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type the cluster name to confirm destruction
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          EXPECTED: ${{ vars.CLUSTER_NAME || 'trend-lab-eks' }}
+        run: |
+          [ "$CONFIRM" = "$EXPECTED" ] || { echo "::error::confirmation '$CONFIRM' does not match cluster '$EXPECTED'"; exit 1; }
+
+  destroy:
+    needs: guard
+    uses: m1kl0s/trend-secure-pipeline/.github/workflows/destroy-eks.yml@main
+    with:
+      aws_region: ${{ vars.AWS_REGION }}
+      aws_role_arn: ${{ vars.AWS_ROLE_ARN }}
+      tf_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+      cluster_name: ${{ vars.CLUSTER_NAME || 'trend-lab-eks' }}
+      v1_regional_fqdn: ${{ vars.V1_REGIONAL_FQDN || 'api.eu.xdr.trendmicro.com' }}
+      helm_release: opencti
+      helm_namespace: opencti
+    secrets:
+      VISIONONE_API_KEY: ${{ secrets.VISIONONE_API_KEY }}

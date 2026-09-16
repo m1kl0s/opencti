@@ -1,0 +1,95 @@
+name: Trend Vision One – secure build, scan and deploy
+
+# Fork-hardening pipeline: scans source and images with Trend Vision One on every push,
+# and deploys to an EKS cluster protected by Vision One Container Security on master
+# (or on demand). Shared logic lives in m1kl0s/trend-secure-pipeline.
+
+on:
+  push:
+    branches: [master, trend-security-pipeline]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy to EKS after the scans pass
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: trend-security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  scan-source:
+    name: Scan source
+    uses: m1kl0s/trend-secure-pipeline/.github/workflows/security-scan.yml@main
+    with:
+      v1_region: ${{ vars.V1_REGION || 'eu-central-1' }}
+      file_security: true
+      code_security: true
+      source_path: "."
+      evaluate_policy: false
+    secrets:
+      VISIONONE_API_KEY: ${{ secrets.VISIONONE_API_KEY }}
+
+  build:
+    name: Build images
+    uses: ./.github/workflows/ci-docker-build.yml
+    with:
+      image_tag: ${{ github.sha }}
+      checkout_ref: ${{ github.sha }}
+      publish_to_registry: "false"
+
+  scan-images:
+    name: Scan images
+    needs: build
+    uses: m1kl0s/trend-secure-pipeline/.github/workflows/security-scan.yml@main
+    with:
+      v1_region: ${{ vars.V1_REGION || 'eu-central-1' }}
+      file_security: false
+      code_security: false
+      image_artifacts: >-
+        [{"artifact":"docker-image-opencti-platform","file":"opencti-platform.tar"},
+         {"artifact":"docker-image-opencti-worker","file":"opencti-worker.tar"}]
+    secrets:
+      VISIONONE_API_KEY: ${{ secrets.VISIONONE_API_KEY }}
+
+  deploy:
+    name: Deploy to EKS
+    needs: [scan-source, build, scan-images]
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && inputs.deploy))
+    uses: m1kl0s/trend-secure-pipeline/.github/workflows/deploy-eks.yml@main
+    with:
+      aws_region: ${{ vars.AWS_REGION }}
+      aws_role_arn: ${{ vars.AWS_ROLE_ARN }}
+      tf_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+      cluster_name: ${{ vars.CLUSTER_NAME || 'trend-lab-eks' }}
+      v1_regional_fqdn: ${{ vars.V1_REGIONAL_FQDN || 'api.eu.xdr.trendmicro.com' }}
+      ecr_repositories: '["opencti-platform","opencti-worker"]'
+      images: >-
+        [{"artifact":"docker-image-opencti-platform","file":"opencti-platform.tar","repository":"opencti-platform"},
+         {"artifact":"docker-image-opencti-worker","file":"opencti-worker.tar","repository":"opencti-worker"}]
+      image_tag: ${{ github.sha }}
+      helm_release: opencti
+      helm_namespace: opencti
+      helm_chart: oci://ghcr.io/devops-ia/helm-opencti/opencti
+      helm_chart_version: ${{ vars.OPENCTI_CHART_VERSION || '3.0.8' }}
+      helm_values_file: deploy/eks/opencti-values.yaml
+      image_values: >-
+        [{"key":"image","repository":"opencti-platform"},
+         {"key":"worker.image","repository":"opencti-worker"}]
+      generated_secret: >-
+        {"name":"opencti-credentials","keys":{
+          "APP__ADMIN__PASSWORD":"password:24","APP__ADMIN__TOKEN":"uuid",
+          "APP__HEALTH_ACCESS_KEY":"uuid","APP__ENCRYPTION_KEY":"base64:32",
+          "RUSTFS_ACCESS_KEY":"password:20","RUSTFS_SECRET_KEY":"password:40",
+          "rabbitmq-password":"password:24","rabbitmq-erlang-cookie":"password:32"}}
+    secrets:
+      VISIONONE_API_KEY: ${{ secrets.VISIONONE_API_KEY }}
