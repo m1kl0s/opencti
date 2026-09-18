@@ -85,13 +85,21 @@ lifecycle:
 
 terminationGracePeriodSeconds: 20
 
+# TLS terminates on the AWS load balancer; the certificate ARN (IAM or ACM) is supplied per
+# environment through the annotation service.beta.kubernetes.io/aws-load-balancer-ssl-cert.
 service:
   type: LoadBalancer
-  port: 80
+  port: 443
   targetPort: 4000
   protocol: TCP
-  portName: http
-  appProtocol: HTTP
+  portName: https
+  appProtocol: HTTPS
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+  loadBalancer: {}
+  # Restrict who can reach OpenCTI:
+  #   sourceRanges: ["203.0.113.4/32"]
 
 resources:
   requests:
