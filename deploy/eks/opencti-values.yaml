@@ -13,6 +13,17 @@ image:
   pullPolicy: IfNotPresent
 
 env:
+  # The chart's defaults set every credential below to "ChangeMe". Null them so the only
+  # values in the container come from the opencti-credentials secret, and so the chart
+  # builds its health probe from the environment instead of the default key.
+  APP__ADMIN__PASSWORD: null
+  APP__ADMIN__TOKEN: null
+  APP__ENCRYPTION_KEY: null
+  APP__HEALTH_ACCESS_KEY: null
+  MINIO__ACCESS_KEY: null
+  MINIO__SECRET_KEY: null
+  RABBITMQ__PASSWORD: null
+
   APP__ADMIN__EMAIL: admin@opencti.local
   APP__BASE_PATH: "/"
   APP__TELEMETRY__METRICS__ENABLED: true
