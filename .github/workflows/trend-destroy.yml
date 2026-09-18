@@ -31,7 +31,7 @@ jobs:
       aws_role_arn: ${{ vars.AWS_ROLE_ARN }}
       tf_state_bucket: ${{ vars.TF_STATE_BUCKET }}
       cluster_name: ${{ vars.CLUSTER_NAME || 'trend-lab-eks' }}
-      v1_regional_fqdn: ${{ vars.V1_REGIONAL_FQDN || 'api.eu.xdr.trendmicro.com' }}
+      v1_regional_fqdn: ${{ vars.V1_REGIONAL_FQDN || 'https://api.eu.xdr.trendmicro.com' }}
       helm_release: opencti
       helm_namespace: opencti
     secrets:
